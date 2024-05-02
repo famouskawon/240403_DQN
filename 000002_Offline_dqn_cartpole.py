@@ -8,6 +8,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
+import pickle
+
+
 class ReplayBuffer:
     def __init__(self, buffer_size, batch_size):
         self.buffer = deque(maxlen=buffer_size)
@@ -46,7 +49,7 @@ class QNet(nn.Module):
 
 
 class DQNAgent:
-    def __init__(self):
+    def __init__(self, dataset):
         self.gamma = 0.98
         self.lr = 0.0005
         self.epsilon = 0.1
@@ -54,7 +57,7 @@ class DQNAgent:
         self.batch_size = 32
         self.action_size = 2
 
-        self.replay_buffer = ReplayBuffer(self.buffer_size, self.batch_size)
+        self.replay_buffer = dataset #offline
         self.qnet = QNet(self.action_size)
         self.qnet_target = QNet(self.action_size)
         self.optimizer = optim.Adam(self.qnet.parameters(), lr=self.lr)
@@ -68,26 +71,21 @@ class DQNAgent:
             return qs.argmax().item()
 
     def update(self, state, action, reward, next_state, done):
-        # 경험 재생 버퍼에 경험 데이터 추가
-        self.replay_buffer.add(state, action, reward, next_state, done)
-        if len(self.replay_buffer) < self.batch_size:
-            # 데이터가 쌓이지 않았다면 바로 종료
-            return
+        # 경험 재생 버퍼에 경험 데이터 추가 -> Offline이기 때문에 X
+        # self.replay_buffer.add(state, action, reward, next_state, done)
+        # if len(self.replay_buffer) < self.batch_size:
+        #     # 데이터가 쌓이지 않았다면 바로 종료
+        #     return
 
         # 미니배치 크기 이상이 쌓이면 미니배치 생성
         state, action, reward, next_state, done = self.replay_buffer.get_batch()
         
-        qs = self.qnet(state) # qs([32,2]) | state([32,4])
+        qs = self.qnet(state)
         q = qs[np.arange(len(action)), action]
 
-        next_qs = self.qnet(next_state) # next_qs([32,2])
-        argmax_actions = next_qs.argmax(1)[0] # DQN: $\max_a Q(s_t+1,a;\theta_t^-)$ next_q([32])
-        
-        # next_q = next_qs.max(1)[0] # DQN: $\max_a Q(s_t+1,a;\theta_t^-)$ next_q([32])
-        
         next_qs = self.qnet_target(next_state)
-        next_q = next_qs[np.arange(self.batch_size),argmax_actions]
-        
+        next_q = next_qs.max(1)[0]
+
         next_q.detach()
         target = reward + (1 - done) * self.gamma * next_q
 
@@ -101,11 +99,13 @@ class DQNAgent:
     def sync_qnet(self):
         self.qnet_target.load_state_dict(self.qnet.state_dict())
 
-
+with open('Dataset_for_offlineRL.pkl', 'rb') as f:
+    dataset = pickle.load(f)
+    
 episodes = 500
 sync_interval = 20
 env = gym.make('CartPole-v1')
-agent = DQNAgent()
+agent = DQNAgent(dataset)
 reward_history = []
 
 for episode in range(episodes):
@@ -123,7 +123,7 @@ for episode in range(episodes):
         next_state, reward, terminated, truncated, info  = env.step(action)
 
         done = terminated or truncated
-
+        
         agent.update(state, action, reward, next_state, done)
         state = next_state
         total_reward += reward
@@ -146,10 +146,10 @@ import os
 
 # 파일 이름 생성 및 파일 존재 여부 확인
 index = 0
-filename = f'080205_CartpoleResults/Double_DQN_reward_history_{index}.pkl'
+filename = f'000000_Offline_CartpoleResults/Offline_DQN_reward_history_{index}.pkl'
 while os.path.exists(filename):
     index += 1  # 파일이 이미 존재하면 인덱스 증가
-    filename = f'080205_CartpoleResults/Double_DQN_reward_history_{index}.pkl'  # 새로운 파일 이름 업데이트
+    filename = f'000000_Offline_CartpoleResults/Offline_DQN_reward_history_{index}.pkl'  # 새로운 파일 이름 업데이트
 
 # 파일이 존재하지 않으면, 새로운 인덱스를 사용해 파일 저장
 with open(filename, 'wb') as f:

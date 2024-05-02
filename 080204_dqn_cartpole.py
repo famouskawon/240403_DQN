@@ -98,7 +98,7 @@ class DQNAgent:
         self.qnet_target.load_state_dict(self.qnet.state_dict())
 
 
-episodes = 300
+episodes = 500
 sync_interval = 20
 env = gym.make('CartPole-v1')
 agent = DQNAgent()
@@ -116,8 +116,10 @@ for episode in range(episodes):
         action = agent.get_action(state)
         print(".",end="")
         # next_state, reward, done, info = env.step(action)
-        next_state, reward, done, truncated, info  = env.step(action)
+        next_state, reward, terminated, truncated, info  = env.step(action)
 
+        done = terminated or truncated
+        
         agent.update(state, action, reward, next_state, done)
         state = next_state
         total_reward += reward

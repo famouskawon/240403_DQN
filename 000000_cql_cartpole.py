@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
+
 class ReplayBuffer:
     def __init__(self, buffer_size, batch_size):
         self.buffer = deque(maxlen=buffer_size)
@@ -67,6 +68,17 @@ class DQNAgent:
             qs = self.qnet(state)
             return qs.argmax().item()
 
+####################################################################################
+    def cql_loss(self, q_values, current_action):
+        """Computes the CQL loss for a batch of Q-values and actions."""
+        alpha = 0.1
+        logsumexp = torch.logsumexp(q_values, dim=1, keepdim=True)
+        current_action = current_action.unsqueeze(1)  # current_action의 차원을 [32, 1]로 변경
+        q_a = q_values.gather(1, current_action)  # 수정된 current_action을 사용하여 gather
+    
+        return alpha*(logsumexp - q_a).mean()
+####################################################################################
+
     def update(self, state, action, reward, next_state, done):
         # 경험 재생 버퍼에 경험 데이터 추가
         self.replay_buffer.add(state, action, reward, next_state, done)
@@ -77,22 +89,20 @@ class DQNAgent:
         # 미니배치 크기 이상이 쌓이면 미니배치 생성
         state, action, reward, next_state, done = self.replay_buffer.get_batch()
         
-        qs = self.qnet(state) # qs([32,2]) | state([32,4])
+        qs = self.qnet(state)
         q = qs[np.arange(len(action)), action]
 
-        next_qs = self.qnet(next_state) # next_qs([32,2])
-        argmax_actions = next_qs.argmax(1)[0] # DQN: $\max_a Q(s_t+1,a;\theta_t^-)$ next_q([32])
-        
-        # next_q = next_qs.max(1)[0] # DQN: $\max_a Q(s_t+1,a;\theta_t^-)$ next_q([32])
-        
         next_qs = self.qnet_target(next_state)
-        next_q = next_qs[np.arange(self.batch_size),argmax_actions]
-        
+        next_q = next_qs.max(1)[0]
+
         next_q.detach()
         target = reward + (1 - done) * self.gamma * next_q
+####################################################################################
 
-        loss_fn = nn.MSELoss()
-        loss = loss_fn(q, target)
+        cql_loss = self.cql_loss(qs, action)
+        
+        bellman_error = nn.MSELoss()
+        loss = cql_loss + 0.5 * bellman_error(q, target)
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -146,10 +156,10 @@ import os
 
 # 파일 이름 생성 및 파일 존재 여부 확인
 index = 0
-filename = f'080205_CartpoleResults/Double_DQN_reward_history_{index}.pkl'
+filename = f'080205_CartpoleResults/CQL_reward_history_{index}.pkl'
 while os.path.exists(filename):
     index += 1  # 파일이 이미 존재하면 인덱스 증가
-    filename = f'080205_CartpoleResults/Double_DQN_reward_history_{index}.pkl'  # 새로운 파일 이름 업데이트
+    filename = f'080205_CartpoleResults/CQL_reward_history_{index}.pkl'  # 새로운 파일 이름 업데이트
 
 # 파일이 존재하지 않으면, 새로운 인덱스를 사용해 파일 저장
 with open(filename, 'wb') as f:
