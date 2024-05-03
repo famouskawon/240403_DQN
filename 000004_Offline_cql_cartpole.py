@@ -70,7 +70,6 @@ class DQNAgent:
 
 ####################################################################################
     def cql_loss(self, q_values, current_action):
-        """Computes the CQL loss for a batch of Q-values and actions."""
         alpha = 0.1
         logsumexp = torch.logsumexp(q_values, dim=1, keepdim=True)
         current_action = current_action.unsqueeze(1)  # current_action의 차원을 [32, 1]로 변경

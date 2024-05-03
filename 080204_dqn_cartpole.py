@@ -98,7 +98,7 @@ class DQNAgent:
         self.qnet_target.load_state_dict(self.qnet.state_dict())
 
 
-episodes = 500
+episodes = 2000
 sync_interval = 20
 env = gym.make('CartPole-v1')
 agent = DQNAgent()
